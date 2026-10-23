@@ -46,6 +46,9 @@ import CoachChat from './views/CoachChat.jsx'
 import Measurements from './views/Measurements.jsx'
 import CoachIntake from './views/CoachIntake.jsx'
 import CoachSetup from './views/CoachSetup.jsx'
+import Profile from './views/Profile.jsx'
+import Badges from './views/Badges.jsx'
+import WorkoutComplete from './views/WorkoutComplete.jsx'
 
 // last known scrollY per route, so back-navigation can put the page where it was
 const scrollPositions = new Map()
@@ -65,6 +68,8 @@ function applyPrefs(theme, accent) {
   if (meta) meta.content = de.dataset.theme === 'light' ? '#f2f2f7' : '#000000'
   if (MOBILE) setSystemBarsLight(de.dataset.theme === 'light')
 }
+
+const TAB_ROOTS = ['/home', '/plan', '/stats', '/profile']
 
 function Shell() {
   const navigate = useNavigate()
@@ -185,7 +190,19 @@ function Shell() {
   }, [inWorkout])
   // The chat owns the bottom of the screen as well: its composer sits where the tabs would be.
   // The first-launch card has no tabs either: they changed the route behind it.
-  const noTabs = inWorkout || loc.pathname === '/coach' || needsMobileOnboarding
+  // The reward screen after Finish has its own way out (Collect & finish), like the workout it ends.
+  // How the page comes in (index.css "page transitions"): between tabs a short cross-fade, going
+  // deeper a push from the trailing edge, coming back the same from the leading edge — the
+  // navigation stack's own motion. Decided once per route change; a re-render keeps it.
+  const shownPath = useRef(loc.pathname)
+  const pageIn = useRef('vfade')
+  if (shownPath.current !== loc.pathname) {
+    const tab = p => TAB_ROOTS.includes(p)
+    pageIn.current = tab(shownPath.current) && tab(loc.pathname) ? 'vt-tab'
+      : navType === 'POP' ? 'vt-pop' : navType === 'PUSH' ? 'vt-push' : 'vfade'
+    shownPath.current = loc.pathname
+  }
+  const noTabs = inWorkout || loc.pathname === '/coach' || loc.pathname.startsWith('/complete/') || needsMobileOnboarding
 
   const authed = user || isGuest
   if (!ready && !authed) return (
@@ -200,7 +217,7 @@ function Shell() {
     <>
       {/* keyed on the route: a view that throws is contained, and switching tabs
           re-mounts the boundary, so the tab bar is always a way out */}
-      <div id="app" className="vfade" key={loc.pathname}>
+      <div id="app" className={pageIn.current} key={loc.pathname}>
         <ErrorBoundary>
           {!authed ? <Login /> : needsMobileOnboarding ? <MobileOnboarding /> : (
             <Routes>
@@ -218,6 +235,9 @@ function Shell() {
               <Route path="/structural-balance" element={<StructuralBalance />} />
               <Route path="/progress-photos" element={<ProgressPhotos />} />
               <Route path="/measurements" element={<Measurements />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/badges" element={<Badges />} />
+              <Route path="/complete/:id" element={<WorkoutComplete />} />
               <Route path="/settings" element={<SettingsRoute />} />
               <Route path="/settings/:page" element={<SettingsRoute />} />
               {/* The Coach screens gate themselves on the instance config; the routes exist

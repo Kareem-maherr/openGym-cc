@@ -13,8 +13,9 @@ import { scheduleModeOf } from '../lib/rotation.js'
 import { useConnectionTrouble } from '../components/SyncBanner.jsx'
 import { Button } from '../components/ui.jsx'
 import { tappable } from '../lib/use-sheet-keyboard.js'
-import { glyphOf } from '../lib/glyphs.js'
 import { dayNoteOf } from '../lib/day-notes.js'
+import { playerOf, questsOf, badgesOf, missionXp, sessionXp, hoursToReset } from '../lib/xp.js'
+import { LevelHex, XpSegs, BadgeArt, openBadge, fmtXp } from '../components/Gamify.jsx'
 
 // Home = what to do now + a quick glance. Deep charts & history live in Stats.
 export default function Home() {
@@ -89,8 +90,6 @@ export default function Home() {
   const managedQueue = !!liveQ && !!S.rotation && liveQ.rotationId === S.rotation.id
   // On a rest day, saying when you train next beats leaving the row as a full stop.
   const next = !S.active && !todayRoutines.length && !(rotating && !plannerQueue) ? nextTrainingDay(S, todayISO()) : null
-  // The streak card's fraction: this calendar week's workouts over the weekdays with a plan, or,
-  // in a coach week, the queue's sessions and your own days together (lib/queue.js weekTally).
   const { done: doneThisWeek, planned: plannedPerWeek } = weekTally(S, todayISO())
   const bwPoints = S.bodyweight.slice(-30).map(b => ({ t: b.t || new Date(b.d).getTime(), y: b.w, d: b.d }))
 
@@ -100,11 +99,98 @@ export default function Home() {
   // already in progress wins, as on the today row — starting another would overwrite it.
   const onQueueStart = id => { if (S.active) nav('/workout'); else startFlow([id]) }
 
-  return <div className="narrow">
-    <div className="hdr">
-      <div><h1>{user ? t('Hi {0}', user.name) : 'openGym'}</h1><div className="sub">{today.toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}</div></div>
-      <button className="iconbtn" onClick={() => nav('/settings')} aria-label={trouble ? t('Settings') + ', ' + t('Connection problem') : t('Settings')}><Icon name="gear" />{trouble && <span className="tab-dot" aria-hidden="true" />}</button>
+  const tISO = todayISO()
+  const player = playerOf(S, tISO)
+  const quests = questsOf(S, tISO)
+  const recent = badgesOf(S).filter(b => b.earned).sort((a, b) => (a.earnedOn < b.earnedOn ? 1 : a.earnedOn > b.earnedOn ? -1 : 0)).slice(0, 4)
+  const mission = missionXp(S, todayRoutines, tISO)
+  const doneXp = doneToday ? sessionXp(S, doneToday.id) : null
+  const streak = streakWeeks(S)
+  const rankName = r => t(r.name) + (r.tier ? ' ' + r.tier : '')
+  const questTitle = q => q.key === 'daySets' ? t('Complete {0} sets', q.need)
+    : q.key === 'dayPr' ? t('Beat a personal record')
+    : q.key === 'weekTrain' ? t('Train {0}× this week', q.need)
+    : t('Log {0} sets this week', q.need)
+
+  return <div className="narrow gx">
+    {/* Home = the player card, today's mission and the quests in play; the week, the check-in
+        and body weight follow as before. Level, quests and badges are read from the log by
+        lib/xp.js — nothing about them is stored. */}
+    <div className="gx-top">
+      <span className="date">{today.toLocaleDateString(dateLocale(), { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+      <div className="row" style={{ gap: 8 }}>
+        <button className="gx-pill cnd" onClick={() => calendarSheet()} aria-label={t('{0} week streak', streak)}>
+          <Icon name="flame" style={{ color: 'var(--orange)', fontSize: 16 }} />{streak} {t('WK')}
+        </button>
+        <button className="iconbtn" onClick={() => nav('/settings')} aria-label={trouble ? t('Settings') + ', ' + t('Connection problem') : t('Settings')}><Icon name="gear" />{trouble && <span className="tab-dot" aria-hidden="true" />}</button>
+      </div>
     </div>
+
+    <div className="gx-hero tap" {...tappable(() => nav('/profile'))}>
+      <div className="gx-id">
+        <LevelHex lvl={player.lvl} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="cnd gx-kicker gx-acc">{(t('Rank') + ' · ' + rankName(player.rank)).toUpperCase()}</div>
+          <div className="gx-name">{user?.name || 'openGym'}</div>
+          <div className="small muted" style={{ marginTop: 2 }}>{t('{0} XP to {1}', fmtXp(player.next.xp), rankName(player.next.rank))}</div>
+        </div>
+        <Icon name="chevronRight" className="chev" />
+      </div>
+      <XpSegs cur={player.cur} max={player.max} />
+      <div className="gx-xprow cnd gx-meta"><span><span className="gx-gold">{fmtXp(player.cur)}</span> / {fmtXp(player.max)} XP</span><span>{t('LVL')} {player.lvl + 1}</span></div>
+      <div className="gx-stats">
+        <div><div className="v cnd">{player.workouts}</div><div className="l">{t('Workouts')}</div></div>
+        <div><div className="v cnd">{player.prsMonth}</div><div className="l">{t('PRs this month')}</div></div>
+        <div><div className="v cnd">{player.badges}</div><div className="l">{t('Badges')}</div></div>
+      </div>
+    </div>
+
+    {/* Today's mission. A session in progress wins, then one already logged today, then the
+        plan; a rest day says when you train next. Start goes through onToday, the path the old
+        today row took, so a rescheduled or rotation day starts the same session it always did. */}
+    <div className="gx-mission">
+      {/* The old today row's wording, kept word for word (.ttl / .ss / .tag): which session is
+          today's is subtle in a coach week, a rotation or with a pin, and Home.queue.test pins it.
+          Once today's session is logged the card stops asking for it (issue #4) and opens what
+          it earned instead. */}
+      <div className="row between">
+        <span className="cnd gx-kicker" style={S.active ? { color: 'var(--gx-orange)' } : doneToday ? { color: 'var(--gx-acc)' } : undefined}>
+          {(S.active ? (editingSaved ? t('Edit workout') : t('In progress')) : doneToday ? t('Mission complete') : routine ? t("Today's mission") : t('Today')).toUpperCase()}
+        </span>
+        {!S.active && (doneToday ? doneXp : routine) && <span className="cnd gx-gold" style={{ fontSize: 14, fontWeight: 600, letterSpacing: '.04em' }}>+{fmtXp(doneToday ? doneXp.xp : mission.xp)} XP</span>}
+      </div>
+      <div className="gx-title ttl" style={{ marginTop: 6 }}>{S.active ? (editingSaved ? S.active.name : t('{0} (in progress)', S.active.name))
+        : doneToday ? (doneToday.name ? t('{0} (done)', doneToday.name) : t('Workout done'))
+        : routine ? todayName : t('Rest day')}{todayOvr && routine && !doneToday ? ' · ' + t('rescheduled') : ''}</div>
+      {next && !doneToday && <div className="ss small muted" style={{ marginTop: 4 }}>{t('Next session: {0}, {1}', t(DAYN[next.weekday]), next.routine.name)}</div>}
+      {!S.active && !doneToday && routine && <div className="gx-chips">
+        <span>{tn('{0} exercise', '{0} exercises', todayRoutines.reduce((n, r) => n + (r.ex?.length || 0), 0))}</span>
+        {mission.sets > 0 && <span>{tn('{0} set', '{0} sets', mission.sets)}</span>}
+      </div>}
+      {S.active ? <button className="gx-go orange" onClick={onToday}><Icon name={editingSaved ? 'pencil' : 'play'} /><span className="tag">{editingSaved ? t('Edit') : t('Resume')}</span></button>
+        : doneToday ? <button className="gx-go" style={{ background: 'var(--surface-2)', color: 'var(--label)' }} onClick={() => nav('/complete/' + encodeURIComponent(doneToday.id))}><Icon name="checkCircle" style={{ color: 'var(--green)' }} /><span className="tag">{t('Done')}</span></button>
+        : routine ? <button className="gx-go" onClick={onToday}><Icon name="play" /><span className="tag">{t('Start')}</span></button>
+        : <button className="gx-go" style={{ background: 'var(--surface-2)', color: 'var(--label)' }} onClick={onToday}><Icon name="plus" />{t('Plan today')}</button>}
+      {/* The door to a freestyle session or another routine — the mission's button and the tab
+          bar's Start both go straight into today's plan. */}
+      {!S.active && <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
+        <Button size="sm" variant="ghost" className="dim" icon="swap" onClick={() => nav('/workout')}>{t('Choose a different workout')}</Button>
+      </div>}
+    </div>
+
+    <div className="gx-sec"><span className="cnd gx-kicker">{t('Quests').toUpperCase()}</span><span className="r">{t('Daily resets in {0}h', hoursToReset())}</span></div>
+    <div className="gx-quests">
+      {quests.map(q => <div key={q.key} className="gx-quest" style={q.done ? { boxShadow: `inset 0 0 0 1px color-mix(in srgb,${q.color} 50%,transparent)` } : undefined}>
+        <div className="row between"><span className="cnd k" style={{ color: q.color }}>{(q.kind === 'daily' ? t('Daily') : t('Weekly')).toUpperCase()}</span><span className="cnd x">{q.done ? '✓ ' : ''}+{q.xp}</span></div>
+        <div className="tt">{questTitle(q)}</div>
+        <div className="row" style={{ gap: 6 }}><div className="gx-bar"><div style={{ width: q.pct + '%', background: q.color }} /></div><span className="cnd p">{q.have}/{q.need}</span></div>
+      </div>)}
+    </div>
+
+    <div className="gx-sec" style={{ paddingTop: 8 }}><span className="cnd gx-kicker">{t('Recent badges').toUpperCase()}</span><button className="lnk" onClick={() => nav('/badges')}>{t('See all')}</button></div>
+    {recent.length ? <div className="gx-recent">
+      {recent.map(b => <button key={b.key} onClick={() => openBadge(b)}><BadgeArt b={b} size={52} /><span>{t(b.name)}</span></button>)}
+    </div> : <div className="card small muted">{t('Finish a workout to start earning badges.')}</div>}
 
     <div className="card">
       {/* A coach week runs by order, not by weekday, so its progress row stands in for the
@@ -121,41 +207,10 @@ export default function Home() {
         </div>
         <div className="week">{strip}</div>
       </>}
-      {/* Once today's session is logged the row stops asking for it. The week strip already
-          knew (its dot goes 'done'); this row did not, so a finished day kept showing the
-          routine name behind a green Start tag and read as still outstanding (issue #4).
-          An in-progress session still wins — that one is happening right now. Tapping the
-          row keeps working, so a second session in one day is a tap away, just not urged. */}
-      <div className="today-row" {...tappable(onToday)}>
-        <div className="row" style={{ gap: 9, minWidth: 0 }}>
-          <span className="lrow-i" style={{ background: S.active ? 'var(--orange)' : doneToday ? 'var(--surface-3)' : routine ? 'var(--acc)' : 'var(--surface-3)' }}>
-            <Icon name={S.active ? (editingSaved ? 'pencil' : 'play') : doneToday ? 'checkCircle' : routine ? glyphOf(routine.emoji) : 'moon'}
-              style={doneToday && !S.active ? { color: 'var(--green)' } : undefined} />
-          </span>
-          <div style={{ minWidth: 0 }}>
-            <div className="lbl2">{t('Today')}</div>
-            <div className="ttl">{S.active ? (editingSaved ? S.active.name : t('{0} (in progress)', S.active.name))
-              : doneToday ? (doneToday.name ? t('{0} (done)', doneToday.name) : t('Workout done'))
-              : routine ? todayName : t('Rest day')}{todayOvr && routine && !doneToday ? ' · ' + t('rescheduled') : ''}</div>
-            {next && !doneToday && <div className="ss">{t('Next session: {0}, {1}', t(DAYN[next.weekday]), next.routine.name)}</div>}
-          </div>
-        </div>
-        {S.active ? <span className="tag" style={{ color: 'var(--orange)', background: 'color-mix(in srgb,var(--orange) 16%,transparent)' }}>{editingSaved ? t('Edit') : t('Resume')}</span>
-          : doneToday ? <span className="tag" style={{ color: 'var(--green)', background: 'color-mix(in srgb,var(--green) 16%,transparent)' }}>{t('Done')}</span>
-          : routine ? <span className="tag acc">{t('Start')}</span>
-          : <Icon name="plus" className="chev" />}
-      </div>
-      {/* The row above starts today's plan in one tap, and so does the Start button in the tab
-          bar — which is the whole problem when you want something else. Both jump straight into
-          the planned session whenever there is one, so the Start screen (a freestyle session,
-          and your other routines) is only reachable on a day with nothing planned. The one other
-          way in, "Choose a different workout" on the weigh-in sheet, does not exist when the
-          weigh-in is switched off. This is that door, and it starts nothing on its own. */}
-      {!S.active && <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
-        <Button size="sm" variant="ghost" className="dim" icon="swap" onClick={() => nav('/workout')}>
-          {t('Choose a different workout')}
-        </Button>
-      </div>}
+      {/* This week's workouts over the days planned — or, in a coach week, the queue's sessions
+          and your own days together (lib/queue.js weekTally). Was the streak card's line; the
+          streak itself is the pill at the top now. */}
+      <div className="muted small" style={{ marginTop: 10, textAlign: 'center' }}>{doneThisWeek}{plannedPerWeek ? ' / ' + plannedPerWeek : ''} {t('this week')} · {tn('{0} workout total', '{0} workouts total', S.workouts.length)}</div>
     </div>
 
     {/* Jump to the gym check-in cards (QR membership codes). Shown here as a quick tap on
@@ -223,17 +278,5 @@ export default function Home() {
         : t("No weigh-ins yet. Log your weight to start the curve (we also ask before every workout).")}</div>}
     </div>}
 
-    <div className="card tappable" style={{ cursor: 'pointer' }} {...tappable(() => calendarSheet())}>
-      <div className="row between">
-        <div>
-          <div className="row" style={{ gap: 7, fontSize: 22, fontWeight: 600, letterSpacing: '-.021em' }}>
-            <Icon name="flame" style={{ color: 'var(--orange)' }} />
-            {t('{0} week streak', streakWeeks(S))}
-          </div>
-          <div className="muted small" style={{ marginTop: 2 }}>{doneThisWeek}{plannedPerWeek ? ' / ' + plannedPerWeek : ''} {t('this week')} · {tn('{0} workout total', '{0} workouts total', S.workouts.length)}</div>
-        </div>
-        <Icon name="calendar" className="chev" style={{ fontSize: 20 }} />
-      </div>
-    </div>
   </div>
 }

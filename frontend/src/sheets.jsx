@@ -3265,7 +3265,7 @@ export function setsLine(sets, unit) {
   return sets.map(s => (s.w > 0 ? fmtNum(s.w) + '×' : '') + reps(s)).join(' · ')
 }
 const TREND = { 1: ['arrowUp', 'var(--green)'], 0: ['minus', 'var(--text-2)'], [-1]: ['arrowDown', 'var(--orange)'] }
-function LastAndNext({ st, w }) {
+export function LastAndNext({ st, w }) {
   const rows = finishCompare(st, w)
   if (!rows.length) return null
   const nextWord = { up: t('step up'), hold: t('same again'), down: t('lighter'), deload: t('deload') }
@@ -3290,7 +3290,7 @@ function LastAndNext({ st, w }) {
 
 // The cardio of the session, which "Last time and next time" leaves out: minutes, speed and the
 // treadmill's incline as they were logged.
-function CardioDone({ st, w }) {
+export function CardioDone({ st, w }) {
   const rows = finishCardio(w)
   if (!rows.length) return null
   return <div style={{ textAlign: 'start', marginBottom: 14 }}>
@@ -3305,32 +3305,6 @@ function CardioDone({ st, w }) {
   </div>
 }
 
-function FinishSummary({ w, prs, e1prs = [], close }) {
-  const st = useStore(s => s.S)
-  return <div style={{ textAlign: 'center', padding: '8px 0' }}>
-    <div style={{ fontSize: 44, display: 'flex', justifyContent: 'center', color: 'var(--acc)' }}><Icon name="trophy" /></div>
-    <h3 style={{ margin: '8px 0' }}>{t('Workout complete!')}</h3>
-    <div className="tiles" style={{ textAlign: 'start' }}>
-      <div className="tile"><div className="l">{t('Duration')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{fmtDur(w.end - w.start)}</div></div>
-      <div className="tile"><div className="l">{t('Volume')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{fmtVol(w.vol, st.unit)}</div></div>
-      <div className="tile"><div className="l">{t('Sets')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{setsWorkCount(setsDone(w), workSetsDone(w))}</div></div>
-      <div className="tile"><div className="l">{t('PRs')}</div><div className="v" style={{ fontSize: 20 }}>{prs.length || '–'}</div></div>
-    </div>
-    {(prs.length > 0 || e1prs.length > 0) && <div style={{ textAlign: 'start', marginBottom: 12 }}>
-      {prs.map(id => <div key={id} className="small accent row" style={{ gap: 5 }}><Icon name="trophy" style={{ fontSize: 13 }} />{t('New PR:')} <span className={exerciseNameClass(EXIDX[id])}>{EXIDX[id] ? exerciseNameFor(EXIDX[id]) : id}</span></div>)}
-      {e1prs.map(p => <div key={p.id} className="small accent row" style={{ gap: 5 }}><Icon name="chartLine" style={{ fontSize: 13 }} />{t('Best estimated 1RM:')} <span className={exerciseNameClass(EXIDX[p.id])}>{EXIDX[p.id] ? exerciseNameFor(EXIDX[p.id]) : p.id}</span> · {fmtNum(p.est)} {st.unit}</div>)}
-    </div>}
-    <h4 className="sec" style={{ textAlign: 'start' }}>{t('What you just trained')}</h4>
-    <BodyMap load={loadOfWorkouts([w])} body={st.body} />
-    <div style={{ height: 14 }} />
-    <LastAndNext st={st} w={w} />
-    <CardioDone st={st} w={w} />
-    {/* The moment for a progress photo or the clip of a set: the workout is already saved, so
-        what is added here goes straight onto its record. */}
-    <div style={{ textAlign: 'start' }}><WorkoutMediaSection w={w} hint /></div>
-    <Button variant="primary" onClick={() => closeThenNav(close, '/home')}>{t('Nice!')}</Button>
-  </div>
-}
 export function finishWorkout() {
   if (S().active?.editingWorkoutId) { saveWorkoutEdits(); return }
   const A = S().active
@@ -3418,5 +3392,8 @@ function doFinishWorkout() {
   // into s.active, which is gone. What it held is not logged, like any set left unchecked.
   useUI.getState().stopWork()
   beep(snd(), 880, 0.15); beep(snd(), 1100, 0.15, 0.18); beep(snd(), 1320, 0.3, 0.36)
-  ui().openSheet(close => <FinishSummary w={shown} prs={prs} e1prs={e1prs} close={close} />, { kind: 'center', locked: true })
+  // The reward screen (views/WorkoutComplete.jsx) takes the workout screen's place in history, so
+  // back from it does not land on an empty session picker.
+  if (shown.id != null) nav('/complete/' + encodeURIComponent(shown.id), { replace: true, state: { e1prs } })
+  else nav('/home', { replace: true })
 }

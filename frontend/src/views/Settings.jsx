@@ -107,10 +107,12 @@ export default function Settings({ page = null, find = null, via = null }) {
   const liveQ = queueOf(S)
   const externalQ = !!liveQ && (!S.rotation || liveQ.rotationId !== S.rotation.id)
 
-  // Two honest choices on a unit switch (issue #22): convert the numbers, or keep them and only
-  // change the label — the old behaviour, still right for someone who logged in lb all along
-  // under a kg label. Closing the sheet leaves the unit as it was.
-  const switchUnit = v => {
+  // The unit control converts at once, like the kg/lb toggle on the workout screen
+  // (components/UnitToggle.jsx). Keeping the numbers and changing only the label (issue #22) —
+  // right for someone who logged in lb all along under a kg label — is the row under it, and
+  // closing its sheet leaves the unit as it was.
+  const otherUnit = (S.unit || 'kg') === 'kg' ? 'lb' : 'kg'
+  const relabelUnit = v => {
     if (v === S.unit) return
     menuSheet({
       title: t('Convert to {0}?', v),
@@ -667,12 +669,14 @@ export default function Settings({ page = null, find = null, via = null }) {
           </Row>
         </>}
       </Section>
-      <Section footer={t('Switching the unit offers to convert every stored weight.')}>
+      <Section footer={t('Switching the unit converts every stored weight.')}>
         <Row icon="scale" iconTint="var(--teal)" title={t('Weight unit')}>
           <Segmented className="seg-inline"
             options={[{ value: 'kg', label: 'kg' }, { value: 'lb', label: 'lb' }]}
-            value={S.unit} onChange={v => switchUnit(v)} />
+            value={S.unit} onChange={v => { if (v !== S.unit) setUnit(v) }} />
         </Row>
+        <Row icon="pencil" iconTint="var(--grey)" title={t('Change the label only')} accessory="chevron"
+          subtitle={t('Keep the numbers, call them {0}.', otherUnit)} onClick={() => relabelUnit(otherUnit)} />
         {/* Display only: one decimal reads fine for plate-loadable numbers, two for anyone whose
             per-side figure lands on .25 or .75, or who loads microplates (issue #139). Nothing is
             stored or rounded differently; lib/format.js fmtNum just prints what is already there. */}

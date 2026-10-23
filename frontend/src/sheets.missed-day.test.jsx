@@ -10,6 +10,7 @@ import { useUI } from './store/useUI.js'
 import { dayOverrideSheet, logPastWorkoutSheet, finishWorkout } from './sheets.jsx'
 import { markAllSetsDone } from './lib/backfill.js'
 import { EXDB } from './lib/exercises-data.js'
+import { setNav } from './lib/nav.js'
 
 const BENCH = '0025'
 const ROW = EXDB.find(e => e.id !== BENCH && e.bp === 'back' && e.eq === 'barbell').id
@@ -175,12 +176,16 @@ describe('badges on a workout logged into the past', () => {
         ? { ...e, sets: e.sets.map(x => (x.phase === 'warmup' ? x : { ...x, w: 60 })) }
         : e)
     }) })
+    const went = []
+    setNav((...a) => went.push(a))
     act(() => finishWorkout())
+    setNav(() => {})
     const byDay = Object.fromEntries(S().workouts.map(w => [w.d, w.prs]))
     expect(byDay['2026-09-14']).toContain(BENCH)
     expect(byDay['2026-09-15']).not.toContain(BENCH)   // 52.5 no longer leads what came before it
     expect(byDay['2026-09-11']).toContain(BENCH)
-    // The summary names it.
-    expect(mountTopSheet().textContent).toContain('New PR:')
+    // The reward screen (views/WorkoutComplete.jsx) opens on the logged day, which lists its records.
+    const logged = S().workouts.find(w => w.d === '2026-09-14')
+    expect(went.at(-1)).toEqual(['/complete/' + encodeURIComponent(logged.id), { replace: true, state: { e1prs: [] } }])
   })
 })

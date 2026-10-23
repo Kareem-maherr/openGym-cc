@@ -180,6 +180,18 @@ body.no-tabbar.resting #app{padding-bottom:calc(96px + var(--sab))}
 .workout-end-spacer{height:0}
 @keyframes viewfade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 #app.vfade{animation:viewfade var(--med) var(--ease)}
+/* Page transitions (App.jsx picks one per route change): tab to tab a quick cross-fade with the
+   slightest settle, deeper a push in from the trailing edge, back the same from the leading edge.
+   Only opacity and transform, so it stays on the compositor; reduced motion turns it off with
+   everything else (above). */
+@keyframes vt-tab{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
+@keyframes vt-push{from{opacity:0;transform:translateX(32px)}to{opacity:1;transform:none}}
+@keyframes vt-pop{from{opacity:0;transform:translateX(-24px)}to{opacity:1;transform:none}}
+#app.vt-tab{animation:vt-tab 240ms var(--ease)}
+#app.vt-push{animation:vt-push 360ms var(--ease)}
+#app.vt-pop{animation:vt-pop 320ms var(--ease)}
+[dir="rtl"] #app.vt-push{animation-name:vt-pop}
+[dir="rtl"] #app.vt-pop{animation-name:vt-push}
 
 /* Connection indicator (components/SyncBanner.jsx): pinned under the status bar for as long as
    the app is not connected to a server. It carries the page's own ground and blur, like the
@@ -2135,3 +2147,159 @@ button.wl-summary{width:100%;padding:0 0 10px;text-align:start;border-radius:var
 [dir="rtl"] *{letter-spacing:0}
 .exfix-link{display:inline-flex;align-items:center;gap:5px;margin:14px 0 4px;color:var(--label-3);text-decoration:none}
 .list .similar-label{margin:16px 2px 6px;grid-column:1/-1}
+
+/* ------------------------------------------------------- XP / player card -- */
+/* The gamified screens (Home's player card, Profile, Badges, Workout complete). Numerals and
+   kickers use Barlow Condensed, self-hosted beside this file (OFL, fonts/OFL.txt) — the app
+   makes no third-party requests, fonts included. Everything else stays the system face. */
+@font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:500;font-display:swap;src:url(./fonts/barlow-condensed-500.woff2) format('woff2')}
+@font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:600;font-display:swap;src:url(./fonts/barlow-condensed-600.woff2) format('woff2')}
+@font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:700;font-display:swap;src:url(./fonts/barlow-condensed-700.woff2) format('woff2')}
+/* Graphite, not tinted: the surfaces stay neutral the way the system's own cards do, and colour
+   comes only from the accent (Settings → Appearance) and the gold of XP. */
+:root{
+  --gx-hero:linear-gradient(180deg,#2c2c2e 0%,#1c1c1e 100%);
+  --gx-hero-line:rgba(255,255,255,.07);
+  --gx-hero-shadow:0 1px 0 rgba(255,255,255,.06) inset;
+  --gx-hex-in:#1c1c1e; --gx-hex-in-2:#1c1c1e;
+  --gx-gold:var(--yellow); --gx-acc:var(--acc); --gx-orange:var(--orange);
+}
+:root[data-theme="light"]{
+  --gx-hero:#ffffff;
+  --gx-hero-line:rgba(0,0,0,.04);
+  --gx-hero-shadow:0 1px 2px rgba(0,0,0,.04),0 10px 30px rgba(0,0,0,.06);
+  --gx-hex-in:#ffffff; --gx-hex-in-2:#ffffff;
+  --gx-gold:#b07d00; --gx-acc:var(--acc-2); --gx-orange:#c46a00;
+}
+.cnd{font-family:'Barlow Condensed',system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.gx{display:flex;flex-direction:column;gap:12px;padding-bottom:12px}
+.gx .card{margin-bottom:0}
+.gx-kicker{font-size:12px;font-weight:600;letter-spacing:.14em;color:var(--label-2)}
+.gx-gold{color:var(--gx-gold)}
+.gx-acc{color:var(--gx-acc)}
+.gx-title{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:2px}
+.gx-meta{font-size:13px;font-weight:500;letter-spacing:.06em;color:var(--label-2)}
+.gx-sec{display:flex;justify-content:space-between;align-items:baseline;padding:4px 4px 0}
+.gx-sec .r{font-size:12px;color:var(--label-3)}
+.gx-sec .lnk{font-size:13px;color:var(--gx-acc);background:none;border:0;padding:0;cursor:pointer}
+
+.gx-top{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+.gx-top .date{font-size:15px;color:var(--label-2)}
+.gx-pill{display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border-radius:999px;background:var(--surface);font-size:15px;font-weight:600;letter-spacing:.02em}
+
+.gx-hex{clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);display:flex;align-items:center;justify-content:center;flex:none}
+.gx-hex-in{width:calc(100% - 6px);height:calc(100% - 6px);clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:.9}
+.gx-lvl-l{font-weight:600;letter-spacing:.12em;color:var(--gx-acc)}
+.gx-lvl-n{font-weight:700}
+
+.gx-hero{position:relative;border-radius:22px;padding:18px;background:var(--gx-hero);box-shadow:inset 0 0 0 .5px var(--gx-hero-line),var(--gx-hero-shadow);overflow:hidden}
+.gx-hero>*{position:relative}
+.gx-hero::before{content:"";position:absolute;right:-40px;top:-60px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--acc) 9%,transparent),transparent 70%);pointer-events:none}
+.gx-hero.tap{cursor:pointer;transition:transform 200ms var(--ease)}
+.gx-hero.tap:active{transform:scale(.985)}
+.gx-hero.gx-centered{text-align:center;padding:22px 18px 18px}
+.gx-hero.gx-centered::before{right:auto;left:50%;top:-60px;width:260px;height:260px;margin-left:-130px}
+.gx-hero.gx-centered .gx-hex{margin:0 auto}
+.gx-id{display:flex;align-items:center;gap:14px}
+.gx-name{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gx-segs{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin-top:16px}
+.gx-segs>div{height:6px;border-radius:3px;background:var(--surface-3);transform-origin:left center}
+:root[data-theme="light"] .gx-segs>div{background:var(--surface-2)}
+.gx-segs>.on,.gx-segs>.half{animation:gx-seg 420ms var(--ease) both;animation-delay:calc(var(--i,0) * 35ms)}
+.gx-segs>.on{background:var(--yellow)}
+.gx-segs>.half{background:color-mix(in srgb,var(--yellow) 50%,transparent)}
+@keyframes gx-seg{from{transform:scaleX(0);opacity:.4}to{transform:none;opacity:1}}
+[dir="rtl"] .gx-segs>div{transform-origin:right center}
+.gx-xprow{display:flex;justify-content:space-between;margin-top:6px}
+.gx-stats{display:grid;grid-template-columns:repeat(3,1fr);margin-top:14px;padding-top:12px;border-top:1px solid var(--sep-op)}
+.gx-stats .v,.gx-tile .v{font-size:24px;font-weight:700;line-height:1}
+.gx-stats .l,.gx-tile .l{font-size:11px;color:var(--label-2);margin-top:3px}
+
+.gx-mission{border-radius:22px;background:var(--surface);padding:16px}
+.gx-chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.gx-chips span{font-size:12px;padding:4px 8px;border-radius:6px;background:var(--surface-2);color:var(--label-2)}
+.gx-go{margin-top:14px;width:100%;height:50px;border:0;border-radius:14px;background:var(--acc);color:var(--on-acc,#000);display:flex;align-items:center;justify-content:center;gap:8px;font-size:17px;font-weight:600;letter-spacing:-.01em;cursor:pointer;transition:transform 160ms var(--ease),opacity 160ms}
+.gx-go:active{transform:scale(.97);opacity:.85}
+.gx-go .tag{all:unset}
+.gx-go.orange{background:var(--orange);color:#000}
+.gx-done{display:flex;align-items:center;gap:12px}
+.gx-ic{flex:none;width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px}
+
+.gx-quests{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.gx-quest{border-radius:16px;background:var(--surface);padding:12px;display:flex;flex-direction:column;gap:8px}
+.gx-quest .k{font-size:10px;font-weight:600;letter-spacing:.14em}
+.gx-quest .x{font-size:13px;font-weight:600;color:var(--gx-gold)}
+.gx-quest .tt{font-size:14px;line-height:1.25;min-height:36px}
+.gx-quest .p{font-size:13px;font-weight:500;color:var(--label-2)}
+.gx-bar{flex:1;height:4px;border-radius:2px;background:var(--surface-2);overflow:hidden}
+.gx-bar>div{height:100%;background:var(--yellow);border-radius:inherit}
+.gx-bar.thick{flex:none;height:8px;border-radius:4px}
+
+.gx-recent{display:flex;gap:10px;border-radius:20px;background:var(--surface);padding:14px 12px;justify-content:space-around}
+.gx-recent>button{width:72px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;background:none;border:0;padding:0;color:inherit;cursor:pointer}
+.gx-recent span{font-size:11px;line-height:1.2;color:var(--label-2)}
+
+.gx-list{border-radius:20px;background:var(--surface);padding:4px 16px}
+.gx-li{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:.5px solid var(--sep)}
+.gx-li:first-child{border-top:0}
+.gx-li .sq{flex:none;width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px}
+.gx-li .grow{flex:1;min-width:0}
+.gx-li .s{font-size:12px;color:var(--label-2)}
+.gx-li .v{font-size:17px;font-weight:600}
+.gx-li.tap{cursor:pointer}
+
+.gx-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.gx-tiles.two{grid-template-columns:1fr 1fr;gap:10px}
+.gx-tile{border-radius:14px;background:var(--surface);padding:10px 12px}
+.gx-tile .h{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--label-2)}
+.gx-tiles.two .gx-tile{border-radius:16px;padding:12px 14px}
+.gx-tiles.two .gx-tile .v{font-size:28px;line-height:1.1;margin-top:4px}
+
+.gx-big{font-size:64px;font-weight:700;line-height:1;color:var(--gx-gold);margin-top:10px}
+.gx-levelup{border-radius:22px;padding:16px;background:var(--acc);color:var(--on-acc,#000);display:flex;align-items:center;gap:14px;animation:gx-pop 560ms cubic-bezier(.34,1.4,.64,1) both}
+.gx-levelup .gx-ic{background:rgba(0,0,0,.12);width:44px;height:44px}
+@keyframes gx-pop{from{transform:scale(.88);opacity:0}to{transform:none;opacity:1}}
+
+.gx-hist{display:flex;align-items:flex-end;gap:8px;height:96px;margin-top:12px}
+.gx-hist>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+.gx-hist .b{width:100%;border-radius:5px;background:color-mix(in srgb,var(--yellow) 45%,transparent)}
+.gx-hist .b.last{background:var(--yellow)}
+.gx-hist span{font-size:10px;color:var(--label-3)}
+
+.gx-badges{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.gx-badge .gx-art{width:min(76px,100%)!important;height:auto!important;aspect-ratio:1}
+.gx-badge{border-radius:18px;background:var(--surface);padding:14px 8px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;border:0;color:inherit;cursor:pointer;font:inherit;transition:transform 180ms var(--ease)}
+.gx-badge:active,.gx-recent>button:active{transform:scale(.95)}
+.gx-badge .n{font-size:13px;font-weight:600;line-height:1.2}
+.gx-badge.locked .n{color:var(--label-2)}
+.gx-badge .gx-bar{flex:none;width:70%;height:3px}
+.gx-badge .gx-bar>div{background:var(--label-2)}
+.gx-badge .s{font-size:12px;font-weight:500;letter-spacing:.08em}
+.gx-badge-sheet{text-align:center;padding:4px 4px 8px}
+.gx-badge-sheet .gx-hex,.gx-badge-sheet .gx-art{margin:0 auto}
+.gx-badge-sheet .gx-art:not(.locked){animation:gx-pop 520ms cubic-bezier(.34,1.4,.64,1) both}
+
+/* Badge art: the round illustration, a hairline ring, and greyed under a lock until earned. */
+.gx-art{position:relative;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 .5px rgba(255,255,255,.08),0 4px 14px rgba(0,0,0,.35)}
+:root[data-theme="light"] .gx-art{box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 4px 12px rgba(0,0,0,.14)}
+.gx-art img{display:block;width:100%;height:100%;border-radius:50%;-webkit-user-drag:none;user-select:none}
+.gx-art.locked{box-shadow:0 0 0 .5px rgba(255,255,255,.08)}
+.gx-art.locked img{filter:grayscale(1) contrast(.9);opacity:.55}
+:root[data-theme="light"] .gx-art.locked img{opacity:.5}
+/* A small lock on the rim, so the art itself stays in view. */
+.gx-art.locked .icn{position:absolute;right:2%;bottom:2%;width:30%;height:30%;padding:5%;box-sizing:border-box;border-radius:50%;background:var(--surface-3);color:var(--label);box-shadow:0 0 0 2px var(--surface)}
+:root[data-theme="light"] .gx-art.locked .icn{background:var(--surface-2)}
+
+/* The player screens arrive in a short cascade, each block a beat after the one above it. */
+.gx>*{animation:gx-rise 420ms var(--ease) both}
+.gx>:nth-child(2){animation-delay:40ms}.gx>:nth-child(3){animation-delay:80ms}.gx>:nth-child(4){animation-delay:120ms}
+.gx>:nth-child(5){animation-delay:160ms}.gx>:nth-child(6){animation-delay:200ms}.gx>:nth-child(n+7){animation-delay:240ms}
+@keyframes gx-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.gx-bar>div{transition:width 600ms var(--ease)}
+.gx-hist .b{animation:gx-grow 520ms var(--ease) both;transform-origin:bottom}
+@keyframes gx-grow{from{transform:scaleY(0)}to{transform:none}}
+
+/* kg ⇄ lb in the workout header (components/UnitToggle.jsx): compact, so the session name keeps
+   its room. */
+.seg.unit-seg{flex:none;width:76px}
+.seg.unit-seg button{padding:3px 6px;font-size:13px;min-height:28px}
